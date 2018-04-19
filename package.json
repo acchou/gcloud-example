@@ -1,0 +1,48 @@
+{
+    "name": "gcloud-example",
+    "version": "1.0.0",
+    "description": "google cloud api usage example",
+    "main": "index.js",
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --watch",
+        "test": "jest"
+    },
+    "author": "",
+    "license": "ISC",
+    "engines": {
+        "node": ">=8.0.0"
+    },
+    "dependencies": {
+        "commander": "^2.12.2",
+        "google-cloud": "^0.57.0",
+        "ix": "^2.3.5",
+        "puppeteer": "^1.1.1",
+        "tslib": "^1.9.0"
+    },
+    "devDependencies": {
+        "@types/jest": "^22.0.0",
+        "@types/node": "^8.5.1",
+        "@types/puppeteer": "^1.0.0",
+        "jest": "^22.0.4",
+        "ts-jest": "^22.0.0",
+        "typescript": "^2.6.2"
+    },
+    "jest": {
+        "transform": {
+            "^.+\\.tsx?$": "ts-jest"
+        },
+        "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
+        "moduleFileExtensions": [
+            "ts",
+            "tsx",
+            "js",
+            "jsx",
+            "json",
+            "node"
+        ],
+        "roots": [
+            "test"
+        ]
+    }
+}
