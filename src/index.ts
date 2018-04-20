@@ -1,5 +1,5 @@
 import * as process from "process";
-import gcloudFn from "google-cloud";
+import gcloudFn = require("google-cloud");
 
 console.log(gcloudFn);
 
@@ -7,7 +7,7 @@ const config = {
     projectId: process.env.GCLOUD_PROJECT
 };
 
-const gcloud = gcloudFn(config);
+const gcloud = gcloudFn();
 const arxiv = gcloud.bucket("arXiv");
 
 console.log(`arxiv: ${arxiv}`);

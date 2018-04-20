@@ -3,5 +3,7 @@ declare module "google-cloud" {
         projectId?: string;
         keyFilename?: string;
     }
-    export default function(config: GoogleConfig): any;
+    interface Compute {}
+    function gcloud(config?: GoogleConfig): any;
+    export = gcloud;
 }
