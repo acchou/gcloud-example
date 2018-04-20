@@ -1,13 +1,17 @@
-import * as process from "process";
-import gcloudFn = require("google-cloud");
+import Storage = require("@google-cloud/storage");
+import Compute = require("@google-cloud/compute");
 
-console.log(gcloudFn);
+const storage = Storage();
+const compute = new Compute();
 
-const config = {
-    projectId: process.env.GCLOUD_PROJECT
-};
+async function main() {
+    try {
+        const [bucket] = await storage.createBucket("foo");
+        console.log(`created bucket ${bucket}`);
+    } catch (err) {
+        console.warn(`EXCEPTION: `);
+        console.warn(err);
+    }
+}
 
-const gcloud = gcloudFn();
-const arxiv = gcloud.bucket("arXiv");
-
-console.log(`arxiv: ${arxiv}`);
+main();
