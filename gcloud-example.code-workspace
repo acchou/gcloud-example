@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "nodejs-compute"
+		},
+		{
+			"path": "nodejs-storage"
+		}
+	],
+	"settings": {}
+}
