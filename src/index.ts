@@ -1,4 +1,7 @@
 import Storage = require("@google-cloud/storage");
+import Compute from "./compute.js";
+
+const compute = new Compute();
 
 const storage = Storage();
 
