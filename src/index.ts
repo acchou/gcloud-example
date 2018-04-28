@@ -1,8 +1,6 @@
 import Storage = require("@google-cloud/storage");
-import Compute = require("@google-cloud/compute");
 
 const storage = Storage();
-const compute = new Compute();
 
 async function main() {
     try {
