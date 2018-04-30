@@ -1,7 +1,10 @@
-import Compute from "@google-cloud/compute";
+let Compute = require("@google-cloud/compute");
 
 const compute = new Compute();
-compute.createFirewall("hello");
-compute.createHealthCheck("");
+const zone = compute.zone("us-west1");
+const vmName = "derivative-instance-1";
+const [vm, operation] = await zone.createVM(vmName);
+await operation;
+log(`VM STARTED`);
 
 export default Compute;
