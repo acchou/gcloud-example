@@ -91,6 +91,116 @@ interface RequestParameters {
     zone?: string; //  The name of the zone for this request.
 }
 
+function logFields<O, K extends keyof O>(obj: O, keys: K[]) {
+    console.group();
+    for (const key of keys) {
+        console.log(`${key}: ${humanStringify(obj[key])}`);
+    }
+    console.groupEnd();
+}
+
+function sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+interface ZoneOperationOptions {
+    operation: string;
+    maxRetries?: number;
+    retryDelayMs?: number;
+}
+
+async function zoneOperation({
+    operation,
+    maxRetries = 10,
+    retryDelayMs = 5 * 1000
+}: ZoneOperationOptions) {
+    let retries = 0;
+    while (retries++ < maxRetries) {
+        const result = await compute.zoneOperations.get({ operation });
+        const { status, progress, startTime, operationType } = result.data;
+        console.log(`Operation "${operationType}" status: ${status}`);
+
+        if (status === "DONE") {
+            return;
+        }
+
+        console.log(`  progress: ${progress}, retrying in in 5s...`);
+        await sleep(retryDelayMs);
+    }
+    throw new Error(`Operation timeout after ${maxRetries} attempts`);
+}
+
+interface CreateDiskOptions {
+    diskName: string;
+    sizeGb: number;
+    diskType?: "pd-ssd" | "pd-standard";
+    image?: string;
+}
+
+async function createDisk({
+    diskName,
+    sizeGb,
+    diskType = "pd-ssd",
+    image = "projects/debian-cloud/global/images/family/debian-8"
+}: CreateDiskOptions) {
+    try {
+        const existingDisk = await compute.disks.get({ disk: diskName });
+        if (existingDisk.data.status === "READY") {
+            return;
+        }
+    } catch {
+        // Try creating the disk if it doesn't exist.
+    }
+
+    const diskTypeResponse = await compute.diskTypes.get({ diskType });
+    const op = await compute.disks.insert({
+        resource: {
+            name: diskName,
+            sizeGb: String(sizeGb),
+            sourceImage: image,
+            type: diskTypeResponse.data.selfLink
+        }
+    });
+    console.log(`disk insert status: ${op.statusText}`);
+    logFields(op.data, ["id", "endTime", "selfLink", "status", "warnings"]);
+
+    const operation = op.data.name;
+    await zoneOperation({ operation });
+}
+
+const diskName = "disk-1";
+interface StartInstanceOptions {
+    name: string;
+}
+
+async function startInstance({ name }: StartInstanceOptions) {
+    const sizeGb = 10;
+    await createDisk({ diskName, sizeGb });
+    console.log(`created disk ${diskName}`);
+
+    // compute.instances.insert({
+    //     resource: {
+    // "name": name,
+    // "machineType": string,
+    // "disks": ,
+    // "scheduling": ,
+    // "cpuPlatform":});
+}
+
+interface DeleteDiskOptions {
+    diskName: string;
+}
+
+async function deleteDisk({ diskName }: DeleteDiskOptions) {
+    const op = await compute.disks.delete({ disk: diskName });
+    console.log(`disk delete status: ${op.data.status}`);
+    await zoneOperation({ operation: op.data.name });
+}
+
+async function stopInstance() {
+    await deleteDisk({ diskName });
+}
+
 async function main() {
     try {
         const auth = await google.auth.getClient({
@@ -101,24 +211,46 @@ async function main() {
         google.options({ auth, params: { project, zone } });
         console.log(`params: ${humanStringify(google._options.params)}`);
 
+        await startInstance({ name: "instance-1" });
+
         const response = await compute.instances.list();
         console.log(`Instances list response: ${response.statusText}`);
-        console.log(`Response kind: ${response.data.kind}`);
-        let instances = response.data.items || [];
+        console.log(`Response data kind: ${response.data.kind}`);
+        const instances = response.data.items || [];
         for (const instance of instances) {
-            console.log(`instance: ${instance.name}`);
-            console.log(`  kind: ${instance.kind}`);
-            console.log(`  id: ${instance.id}`);
-            console.log(`  cpu: ${instance.cpuPlatform}`);
-            console.log(`  created: ${instance.creationTimestamp}`);
-            console.log(`  machineType: ${instance.machineType}`);
-            console.log(`  selfLink: ${instance.selfLink}`);
-            console.log(`  status: ${instance.status}`);
-            console.log(`  zone: ${instance.zone}`);
+            logFields(instance, [
+                "name",
+                "kind",
+                "id",
+                "cpuPlatform",
+                "creationTimestamp",
+                "machineType",
+                "selfLink",
+                "status",
+                "zone"
+            ]);
         }
+        const disksResponse = await compute.disks.list();
+        console.log(`Disks list response: ${disksResponse.statusText}`);
+        console.log(`Response data kind: ${disksResponse.data.kind}`);
+        const disks = disksResponse.data.items || [];
+        for (const disk of disks) {
+            logFields(disk, [
+                "name",
+                "id",
+                "kind",
+                "status",
+                "type",
+                "sizeGb",
+                "selfLink",
+                "creationTimestamp",
+                "sourceImage",
+                "zone"
+            ]);
+        }
+        await stopInstance();
     } catch (err) {
-        console.warn(`EXCEPTION: `);
-        console.warn(err);
+        console.error(`${err}`);
     }
 }
 
