@@ -17,6 +17,7 @@
         "commander": "^2.12.2",
         "google-cloud": "^0.57.0",
         "googleapis": "^29.0.0",
+        "human-stringify": "^0.2.0",
         "ix": "^2.3.5",
         "puppeteer": "^1.1.1",
         "tslib": "^1.9.0"
@@ -35,7 +36,16 @@
             "^.+\\.tsx?$": "ts-jest"
         },
         "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
-        "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"],
-        "roots": ["test"]
+        "moduleFileExtensions": [
+            "ts",
+            "tsx",
+            "js",
+            "jsx",
+            "json",
+            "node"
+        ],
+        "roots": [
+            "test"
+        ]
     }
 }
