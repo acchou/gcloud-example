@@ -6,12 +6,7 @@ const storage = google.storage("v1");
 const vmName = "derivative-instance-1";
 const zone = "us-west1-a";
 
-let context;
-
 interface RequestParameters {
-    project: string; // Project ID for this request.
-    zone: string; //  The name of the zone for this request.
-
     acceleratorType?: string;
     accessConfig?: string;
     address?: string;
@@ -63,6 +58,7 @@ interface RequestParameters {
     ownerTypes?: string;
     pageToken?: string;
     port?: string;
+    project?: string; // Project ID for this request.
     priority?: string;
     region?: string;
     requestId?: string;
@@ -92,6 +88,7 @@ interface RequestParameters {
     validateOnly?: string;
     variableKey?: string;
     vpnTunnel?: string;
+    zone?: string; //  The name of the zone for this request.
 }
 
 async function main() {
@@ -100,21 +97,24 @@ async function main() {
             scopes: ["https://www.googleapis.com/auth/compute"]
         });
 
-        google.options({ auth });
         const project = await google.auth.getDefaultProjectId();
+        google.options({ auth, params: { project, zone } });
+        console.log(`params: ${humanStringify(google._options.params)}`);
 
-        function request<T>(obj: object) {
-            return {
-                project,
-                zone,
-                ...obj
-            };
-        }
-
-        const response = await compute.instances.list({ project, zone });
-        console.log(`Instances list response: ${humanStringify(response)}`);
-        for (const instance of response.data.items) {
-            console.log(instance);
+        const response = await compute.instances.list();
+        console.log(`Instances list response: ${response.statusText}`);
+        console.log(`Response kind: ${response.data.kind}`);
+        let instances = response.data.items || [];
+        for (const instance of instances) {
+            console.log(`instance: ${instance.name}`);
+            console.log(`  kind: ${instance.kind}`);
+            console.log(`  id: ${instance.id}`);
+            console.log(`  cpu: ${instance.cpuPlatform}`);
+            console.log(`  created: ${instance.creationTimestamp}`);
+            console.log(`  machineType: ${instance.machineType}`);
+            console.log(`  selfLink: ${instance.selfLink}`);
+            console.log(`  status: ${instance.status}`);
+            console.log(`  zone: ${instance.zone}`);
         }
     } catch (err) {
         console.warn(`EXCEPTION: `);
