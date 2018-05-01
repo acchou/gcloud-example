@@ -1,17 +1,17 @@
 import Storage = require("@google-cloud/storage");
-import Compute from "@google-cloud/compute";
 
-const compute = new Compute();
+import { google } from "googleapis";
 
-const zone = compute.zone("us-west1");
+const compute = google.compute("v1");
+
+//const zone = compute.zone("us-west1-a");
 const vmName = "derivative-instance-1";
 
 const storage = Storage();
 
 async function main() {
     try {
-        const [vm, operation] = await zone.createVM(vmName);
-        await operation;
+        // const instances = await compute.instances.();
 
         const [bucket] = await storage.createBucket("foo");
         console.log(`created bucket ${bucket}`);
