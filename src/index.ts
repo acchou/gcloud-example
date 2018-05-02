@@ -121,13 +121,22 @@ async function zoneOperation({
         console.log(`Operation "${operationType}" status: ${status}`);
 
         if (status === "DONE") {
-            return;
+            return result.data;
         }
 
         console.log(`  progress: ${progress}, retrying in in 5s...`);
         await sleep(retryDelayMs);
     }
     throw new Error(`Operation timeout after ${maxRetries} attempts`);
+}
+
+interface GetDiskOptions {
+    diskName: string;
+}
+
+async function getDisk({ diskName }: GetDiskOptions) {
+    const response = await compute.disks.get({ disk: diskName });
+    return response.data;
 }
 
 interface CreateDiskOptions {
@@ -143,15 +152,6 @@ async function createDisk({
     diskType = "pd-ssd",
     image = "projects/debian-cloud/global/images/family/debian-8"
 }: CreateDiskOptions) {
-    try {
-        const existingDisk = await compute.disks.get({ disk: diskName });
-        if (existingDisk.data.status === "READY") {
-            return;
-        }
-    } catch {
-        // Try creating the disk if it doesn't exist.
-    }
-
     const diskTypeResponse = await compute.diskTypes.get({ diskType });
     const op = await compute.disks.insert({
         resource: {
@@ -165,26 +165,52 @@ async function createDisk({
     logFields(op.data, ["id", "endTime", "selfLink", "status", "warnings"]);
 
     const operation = op.data.name;
-    await zoneOperation({ operation });
+    return await zoneOperation({ operation });
 }
 
 const diskName = "disk-1";
-interface StartInstanceOptions {
-    name: string;
+
+interface DiskInitializationOptions {
+    diskName?: string;
+    sourceImage?: string;
+    diskSizeGb?: number;
+    diskType?: "pd-ssd" | "pd-standard";
 }
 
-async function startInstance({ name }: StartInstanceOptions) {
-    const sizeGb = 10;
-    await createDisk({ diskName, sizeGb });
-    console.log(`created disk ${diskName}`);
+interface StartInstanceOptions {
+    name: string;
+    diskOptions?: DiskInitializationOptions;
+    machineType?: string;
+    preemptible?: boolean;
+    autoDelete?: boolean;
+}
 
-    // compute.instances.insert({
-    //     resource: {
-    // "name": name,
-    // "machineType": string,
-    // "disks": ,
-    // "scheduling": ,
-    // "cpuPlatform":});
+async function startInstance({
+    name,
+    machineType = "zones/us-west1-a/machineTypes/g1-small",
+    preemptible = false,
+    diskOptions = {
+        sourceImage: "projects/debian-cloud/global/images/family/debian-8",
+        diskSizeGb: 10,
+        diskType: "pd-ssd"
+    },
+    autoDelete = true
+}: StartInstanceOptions) {
+    // const sizeGb = 10;
+    // await createDisk({ diskName, sizeGb });
+    // console.log(`created disk ${diskName}`);
+
+    const result = await compute.instances.insert({
+        resource: {
+            name,
+            machineType,
+            scheduling: { preemptible },
+            disks: [{ initializeParams: diskOptions, autoDelete }],
+            networkInterfaces: []
+        }
+    });
+
+    await zoneOperation({ operation: result.data.name });
 }
 
 interface DeleteDiskOptions {
@@ -197,8 +223,9 @@ async function deleteDisk({ diskName }: DeleteDiskOptions) {
     await zoneOperation({ operation: op.data.name });
 }
 
-async function stopInstance() {
-    await deleteDisk({ diskName });
+async function stopInstance(instance: string) {
+    const result = await compute.instances.delete({ instance });
+    await zoneOperation({ operation: result.data.name });
 }
 
 async function main() {
@@ -211,7 +238,8 @@ async function main() {
         google.options({ auth, params: { project, zone } });
         console.log(`params: ${humanStringify(google._options.params)}`);
 
-        await startInstance({ name: "instance-1" });
+        const instanceName = "instance-1";
+        await startInstance({ name: instanceName });
 
         const response = await compute.instances.list();
         console.log(`Instances list response: ${response.statusText}`);
@@ -248,7 +276,7 @@ async function main() {
                 "zone"
             ]);
         }
-        await stopInstance();
+        await stopInstance(instanceName);
     } catch (err) {
         console.error(`${err}`);
     }
