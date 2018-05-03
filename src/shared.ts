@@ -1,16 +1,13 @@
 import { google } from "googleapis";
 import humanStringify from "human-stringify";
 
-export async function initializeGoogleAPIs(zone: string) {
+export async function initializeGoogleAPIs() {
     const auth = await google.auth.getClient({
-        scopes: [
-            "https://www.googleapis.com/auth/compute",
-            "https://www.googleapis.com/auth/cloud-platform"
-        ]
+        scopes: ["https://www.googleapis.com/auth/cloud-platform"]
     });
 
     const project = await google.auth.getDefaultProjectId();
-    google.options({ auth, params: { project, zone } });
+    google.options({ auth });
     console.log(`params: ${humanStringify(google._options.params)}`);
 }
 
@@ -33,7 +30,7 @@ export interface PollOptions {
 }
 
 export async function poll<T>(
-    f: () => Promise<T>,
+    request: () => Promise<T>,
     checkDone: (result: T) => boolean,
     beforeSleep?: (last: T) => void,
     {
@@ -45,7 +42,7 @@ export async function poll<T>(
     let retries = 0;
     await sleep(initialDelay);
     while (true) {
-        const result = await f();
+        const result = await request();
         if (checkDone(result)) {
             return result;
         }
@@ -55,4 +52,54 @@ export async function poll<T>(
         beforeSleep && beforeSleep(result);
         await sleep(retryDelayMs);
     }
+}
+
+interface HasNextPageToken {
+    nextPageToken: string;
+}
+
+interface HasStatus {
+    status: string;
+}
+
+interface HasOperationType {
+    operationType: string;
+}
+
+type Operation = HasStatus & HasOperationType;
+
+interface HasData<T> {
+    data: T;
+}
+
+export function googlePollOperation<T extends HasData<Operation>>(
+    request: () => Promise<T>,
+    options: PollOptions = {}
+) {
+    let retries = 0;
+    return poll(
+        request,
+        result => result.data && result.data.status === "DONE",
+        result => {
+            retries++;
+            if (!result.data) {
+                console.log(`No data in response, retrying...`);
+                return;
+            }
+            const { status, operationType } = result.data;
+            console.log(`Operation "${operationType}" status: ${status}, retrying...`);
+        },
+        options
+    );
+}
+
+export async function* googlePagedIterator<T extends HasNextPageToken>(
+    request: (token: string | undefined) => Promise<HasData<T>>
+): AsyncIterableIterator<T> {
+    let pageToken: string | undefined;
+    do {
+        const result = await request(pageToken);
+        pageToken = result.data.nextPageToken;
+        yield result.data;
+    } while (pageToken);
 }
