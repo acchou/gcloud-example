@@ -28,7 +28,7 @@ async function poll<T>(
     checkDone: (result: T) => boolean,
     beforeSleep?: (last: T) => void,
     {
-        initialDelay = 10 * 1000,
+        initialDelay = 5 * 1000,
         maxRetries = 10,
         retryDelayMs = 5 * 1000
     }: PollOptions = {}
