@@ -1,52 +1,9 @@
 import { google } from "googleapis";
+import { initializeGoogleAPIs, poll, logFields } from "./shared";
 import humanStringify from "human-stringify";
 
 const compute = google.compute("v1");
 const storage = google.storage("v1");
-const zone = "us-west1-a";
-
-function logFields<O, K extends keyof O>(obj: O, keys: K[]) {
-    console.group();
-    for (const key of keys) {
-        console.log(`${key}: ${humanStringify(obj[key])}`);
-    }
-    console.groupEnd();
-}
-
-function sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-interface PollOptions {
-    initialDelay?: number;
-    maxRetries?: number;
-    retryDelayMs?: number;
-}
-
-async function poll<T>(
-    f: () => Promise<T>,
-    checkDone: (result: T) => boolean,
-    beforeSleep?: (last: T) => void,
-    {
-        initialDelay = 5 * 1000,
-        maxRetries = 10,
-        retryDelayMs = 5 * 1000
-    }: PollOptions = {}
-) {
-    let retries = 0;
-    await sleep(initialDelay);
-    while (true) {
-        const result = await f();
-        if (checkDone(result)) {
-            return result;
-        }
-        if (retries++ >= maxRetries) {
-            return;
-        }
-        beforeSleep && beforeSleep(result);
-        await sleep(retryDelayMs);
-    }
-}
 
 interface ZoneOperationOptions {
     operation: string;
@@ -151,13 +108,8 @@ async function stopInstance(instance: string) {
 
 async function main() {
     try {
-        const auth = await google.auth.getClient({
-            scopes: ["https://www.googleapis.com/auth/compute"]
-        });
-
-        const project = await google.auth.getDefaultProjectId();
-        google.options({ auth, params: { project, zone } });
-        console.log(`params: ${humanStringify(google._options.params)}`);
+        const zone = "us-west1-a";
+        await initializeGoogleAPIs(zone);
 
         const instanceName = "instance-1";
         await insertInstance(instanceName);
