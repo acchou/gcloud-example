@@ -3,93 +3,7 @@ import humanStringify from "human-stringify";
 
 const compute = google.compute("v1");
 const storage = google.storage("v1");
-const vmName = "derivative-instance-1";
 const zone = "us-west1-a";
-
-interface RequestParameters {
-    acceleratorType?: string;
-    accessConfig?: string;
-    address?: string;
-    autoDelete?: string;
-    autoscaler?: string;
-    backendBucket?: string;
-    backendService?: string;
-    commitment?: string;
-    deletionProtection?: string;
-    deviceName?: string;
-    discardLocalSsd?: string;
-    disk?: string;
-    diskType?: string;
-    failoverRatio?: string;
-    family?: string;
-    filter?: string;
-    firewall?: string;
-    forceAttach?: string;
-    forceCreate?: string;
-    forwardingRule?: string;
-    guestFlush?: string;
-    healthCheck?: string;
-    host?: string;
-    hostType?: string;
-    httpHealthCheck?: string;
-    httpsHealthCheck?: string;
-    image?: string;
-    instance?: string;
-    instanceGroup?: string;
-    instanceGroupManager?: string;
-    instanceTemplate?: string;
-    interconnect?: string;
-    interconnectAttachment?: string;
-    interconnectLocation?: string;
-    ipCidrRange?: string;
-    keyName?: string;
-    license?: string;
-    licenseCode?: string;
-    machineType?: string;
-    maintenancePolicy?: string;
-    maxResults?: string;
-    network?: string;
-    networkEndpointGroup?: string;
-    networkInterface?: string;
-    operation?: string;
-    order_by?: string;
-    orderBy?: string;
-    ownerProjects?: string;
-    ownerTypes?: string;
-    pageToken?: string;
-    port?: string;
-    project?: string; // Project ID for this request.
-    priority?: string;
-    region?: string;
-    requestId?: string;
-    resource?: string;
-    resource_?: string;
-    route?: string;
-    router?: string;
-    securityPolicy?: string;
-    size?: string;
-    snapshot?: string;
-    sourceImage?: string;
-    sourceInstanceTemplate?: string;
-    sslCertificate?: string;
-    sslPolicy?: string;
-    start?: string;
-    subnetName?: string;
-    subnetRegion?: string;
-    subnetwork?: string;
-    targetHttpProxy?: string;
-    targetHttpsProxy?: string;
-    targetInstance?: string;
-    targetPool?: string;
-    targetSslProxy?: string;
-    targetTcpProxy?: string;
-    targetVpnGateway?: string;
-    urlMap?: string;
-    validateOnly?: string;
-    variableKey?: string;
-    vpnTunnel?: string;
-    zone?: string; //  The name of the zone for this request.
-}
 
 function logFields<O, K extends keyof O>(obj: O, keys: K[]) {
     console.group();
@@ -103,64 +17,87 @@ function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-interface ZoneOperationOptions {
-    operation: string;
+interface PollOptions {
+    initialDelay?: number;
     maxRetries?: number;
     retryDelayMs?: number;
 }
 
-async function zoneOperation({
-    operation,
-    maxRetries = 10,
-    retryDelayMs = 5 * 1000
-}: ZoneOperationOptions) {
+async function poll<T>(
+    f: () => Promise<T>,
+    checkDone: (result: T) => boolean,
+    beforeSleep?: (last: T) => void,
+    {
+        initialDelay = 10 * 1000,
+        maxRetries = 10,
+        retryDelayMs = 5 * 1000
+    }: PollOptions = {}
+) {
     let retries = 0;
-    while (retries++ < maxRetries) {
-        const result = await compute.zoneOperations.get({ operation });
-        const { status, progress, startTime, operationType } = result.data;
-        console.log(`Operation "${operationType}" status: ${status}`);
-
-        if (status === "DONE") {
-            return result.data;
+    await sleep(initialDelay);
+    while (true) {
+        const result = await f();
+        if (checkDone(result)) {
+            return result;
         }
-
-        console.log(`  progress: ${progress}, retrying in in 5s...`);
+        if (retries++ >= maxRetries) {
+            return;
+        }
+        beforeSleep && beforeSleep(result);
         await sleep(retryDelayMs);
     }
-    throw new Error(`Operation timeout after ${maxRetries} attempts`);
 }
 
-interface GetDiskOptions {
-    diskName: string;
+interface ZoneOperationOptions {
+    operation: string;
 }
 
-async function getDisk({ diskName }: GetDiskOptions) {
-    const response = await compute.disks.get({ disk: diskName });
+async function zoneOperation({ operation }: ZoneOperationOptions) {
+    let retries = 0;
+    const result = await poll(
+        () => compute.zoneOperations.get({ operation }),
+        result => result.data && result.data.status === "DONE",
+        result => {
+            retries++;
+            if (!result.data) {
+                console.log(`No data in response, retrying...`);
+                return;
+            }
+            const { status, progress, startTime, operationType } = result.data;
+            console.log(`Operation "${operationType}" status: ${status}, retrying...`);
+        }
+    );
+
+    if (!result) {
+        console.log(`Timeout after ${retries} attempts.`);
+        return;
+    }
+    console.log(
+        `Completed operation "${result.data.operationType}" on ${result.data.targetLink}`
+    );
+    return result.data;
+}
+
+async function getDisk(disk: string) {
+    const response = await compute.disks.get({ disk });
     return response.data;
 }
 
-interface CreateDiskOptions {
-    diskName: string;
-    sizeGb: number;
-    diskType?: "pd-ssd" | "pd-standard";
-    image?: string;
-}
+async function insertDisk(
+    name: string,
+    sizeGb: number,
+    type: "pd-ssd" | "pd-standard" = "pd-ssd"
+) {
+    const diskTypeResponse = await compute.diskTypes.get({ type });
 
-async function createDisk({
-    diskName,
-    sizeGb,
-    diskType = "pd-ssd",
-    image = "projects/debian-cloud/global/images/family/debian-8"
-}: CreateDiskOptions) {
-    const diskTypeResponse = await compute.diskTypes.get({ diskType });
-    const op = await compute.disks.insert({
-        resource: {
-            name: diskName,
-            sizeGb: String(sizeGb),
-            sourceImage: image,
-            type: diskTypeResponse.data.selfLink
-        }
-    });
+    const disk = {
+        name,
+        sizeGb,
+        type: diskTypeResponse.data.selfLink,
+        sourceImage: "projects/debian-cloud/global/images/family/debian-8"
+    };
+
+    const op = await compute.disks.insert({ resource: disk });
     console.log(`disk insert status: ${op.statusText}`);
     logFields(op.data, ["id", "endTime", "selfLink", "status", "warnings"]);
 
@@ -170,44 +107,28 @@ async function createDisk({
 
 const diskName = "disk-1";
 
-interface DiskInitializationOptions {
-    diskName?: string;
-    sourceImage?: string;
-    diskSizeGb?: number;
-    diskType?: "pd-ssd" | "pd-standard";
-}
-
-interface StartInstanceOptions {
-    name: string;
-    diskOptions?: DiskInitializationOptions;
-    machineType?: string;
-    preemptible?: boolean;
-    autoDelete?: boolean;
-}
-
-async function startInstance({
-    name,
-    machineType = "zones/us-west1-a/machineTypes/g1-small",
-    preemptible = false,
-    diskOptions = {
-        sourceImage: "projects/debian-cloud/global/images/family/debian-8",
-        diskSizeGb: 10,
-        diskType: "pd-ssd"
-    },
-    autoDelete = true
-}: StartInstanceOptions) {
-    // const sizeGb = 10;
-    // await createDisk({ diskName, sizeGb });
-    // console.log(`created disk ${diskName}`);
-
+async function insertInstance(name: string) {
+    const diskTypeResponse = await compute.diskTypes.get({ diskType: "pd-ssd" });
+    const instance = {
+        name,
+        machineType: "zones/us-west1-a/machineTypes/g1-small",
+        disks: [
+            {
+                initializeParams: {
+                    sourceImage: "projects/debian-cloud/global/images/family/debian-8",
+                    diskSizeGb: 10,
+                    diskType: diskTypeResponse.data.selfLink
+                },
+                autoDelete: true,
+                boot: true
+            }
+        ],
+        scheduling: { preemptible: false },
+        networkInterfaces: [{ network: "global/networks/default" }]
+    };
+    console.log(`Inserting Instance: ${humanStringify(instance, { maxDepth: 4 })}`);
     const result = await compute.instances.insert({
-        resource: {
-            name,
-            machineType,
-            scheduling: { preemptible },
-            disks: [{ initializeParams: diskOptions, autoDelete }],
-            networkInterfaces: []
-        }
+        resource: instance
     });
 
     await zoneOperation({ operation: result.data.name });
@@ -239,7 +160,7 @@ async function main() {
         console.log(`params: ${humanStringify(google._options.params)}`);
 
         const instanceName = "instance-1";
-        await startInstance({ name: instanceName });
+        await insertInstance(instanceName);
 
         const response = await compute.instances.list();
         console.log(`Instances list response: ${response.statusText}`);
