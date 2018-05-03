@@ -4,7 +4,6 @@ import { main as sourceRepoMain } from "./sourcerepo";
 import { initializeGoogleAPIs } from "./shared";
 
 async function main() {
-    await initializeGoogleAPIs();
     await computeMain();
     // await sourceRepoMain();
 }

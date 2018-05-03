@@ -16,12 +16,12 @@ export interface DeleteDiskOptions {
 class Compute {
     project: string;
     zone: string;
-    compute: GoogleCompute;
+    gCompute: GoogleCompute;
 
     constructor(google: GoogleApis, project: string, zone: string) {
         this.project = project;
         this.zone = zone;
-        this.compute = google.compute({
+        this.gCompute = google.compute({
             version: "v1",
             params: { zone, project }
         });
@@ -29,7 +29,7 @@ class Compute {
 
     async zoneOperation(operation: string, options: PollOptions = {}) {
         const result = await googlePollOperation(
-            () => this.compute.zoneOperations.get({ operation }),
+            () => this.gCompute.zoneOperations.get({ operation }),
             options
         );
 
@@ -46,7 +46,7 @@ class Compute {
     }
 
     async getDisk(disk: string) {
-        const response = await this.compute.disks.get({ disk });
+        const response = await this.gCompute.disks.get({ disk });
         return response.data;
     }
 
@@ -55,7 +55,7 @@ class Compute {
         sizeGb: number,
         type: "pd-ssd" | "pd-standard" = "pd-ssd"
     ) {
-        const diskTypeResponse = await this.compute.diskTypes.get({ type });
+        const diskTypeResponse = await this.gCompute.diskTypes.get({ type });
 
         const disk = {
             name,
@@ -64,7 +64,7 @@ class Compute {
             sourceImage: "projects/debian-cloud/global/images/family/debian-8"
         };
 
-        const op = await this.compute.disks.insert({ resource: disk });
+        const op = await this.gCompute.disks.insert({ resource: disk });
         console.log(`disk insert status: ${op.statusText}`);
         logFields(op.data, ["id", "endTime", "selfLink", "status", "warnings"]);
 
@@ -73,7 +73,9 @@ class Compute {
     }
 
     async insertInstance(name: string) {
-        const diskTypeResponse = await this.compute.diskTypes.get({ diskType: "pd-ssd" });
+        const diskTypeResponse = await this.gCompute.diskTypes.get({
+            diskType: "pd-ssd"
+        });
         const instance = {
             name,
             machineType: "zones/us-west1-a/machineTypes/g1-small",
@@ -93,7 +95,7 @@ class Compute {
             networkInterfaces: [{ network: "global/networks/default" }]
         };
         console.log(`Inserting Instance: ${humanStringify(instance, { maxDepth: 4 })}`);
-        const result = await this.compute.instances.insert({
+        const result = await this.gCompute.instances.insert({
             resource: instance
         });
 
@@ -102,23 +104,23 @@ class Compute {
 
     async *listInstances() {
         yield* googlePagedIterator(pageToken =>
-            this.compute.instances.list({ pageToken })
+            this.gCompute.instances.list({ pageToken })
         );
     }
 
     async stopInstance(instance: string) {
-        const result = await this.compute.instances.delete({ instance });
+        const result = await this.gCompute.instances.delete({ instance });
         await this.zoneOperation(result.data.name, { initialDelay: 20 * 1000 });
     }
 
     async deleteDisk(diskName: string) {
-        const op = await this.compute.disks.delete({ disk: diskName });
+        const op = await this.gCompute.disks.delete({ disk: diskName });
         console.log(`disk delete status: ${op.data.status}`);
         await this.zoneOperation(op.data.name);
     }
 
     async *listDisks() {
-        yield* googlePagedIterator(pageToken => this.compute.disks.list({ pageToken }));
+        yield* googlePagedIterator(pageToken => this.gCompute.disks.list({ pageToken }));
     }
 }
 
@@ -134,7 +136,7 @@ export async function main() {
 
         console.log(`Running instances:`);
         for await (let instances of compute.listInstances()) {
-            //            instances = instances || [];
+            instances = instances || [];
             for (const instance of instances.items) {
                 console.log(humanStringify(instance, { maxDepth: 1 }));
             }
@@ -142,7 +144,7 @@ export async function main() {
 
         console.log(`Disks:`);
         for await (let disks of compute.listDisks()) {
-            //           const disks = response.data.items || [];
+            disks = disks || [];
             for (const disk of disks.items) {
                 console.log(humanStringify(disk, { maxDepth: 1 }));
             }

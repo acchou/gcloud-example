@@ -1,23 +1,46 @@
-import { google } from "googleapis";
-import { logFields } from "./shared";
+import { logFields, initializeGoogleAPIs, googlePagedIterator } from "./shared";
 import humanStringify from "human-stringify";
-
-const cloudFunctions = google.cloudfunctions("v1");
+import { GoogleApis, google } from "googleapis";
+import { Cloudfunctions as GoogleCloudFunctions } from "googleapis/build/src/apis/cloudfunctions/v1";
 
 const zone = "us-west1-a";
 
-async function main() {
-    const operation = await cloudFunctions.projects.locations.functions.create({
-        location: "foo",
-        resource: {
-            name: "foo",
-            entryPoint: "foo",
-            sourceRespository: {}
-        }
-    });
+class CloudFunctions {
+    gCloudFunctions: GoogleCloudFunctions;
+    constructor(google: GoogleApis) {
+        this.gCloudFunctions = google.cloudfunctions("v1");
+    }
 
-    const list = await cloudFunctions.projects.locations.functions.list({ parent: "" });
-    for (const fn of list.data.functions) {
-        logFields(fn, ["name", "status", "entryPoint", "timeout"]);
+    async *listFunctions(parent: string) {
+        yield* googlePagedIterator(pageToken =>
+            this.gCloudFunctions.projects.locations.functions.list({
+                parent,
+                pageToken
+            })
+        );
+    }
+
+    async createFunction() {
+        const operation = await this.gCloudFunctions.projects.locations.functions.create({
+            location: "foo",
+            resource: {
+                name: "foo",
+                entryPoint: "foo",
+                sourceRespository: {}
+            }
+        });
+    }
+}
+
+async function main() {
+    const google = await initializeGoogleAPIs();
+    const project = await google.auth.getDefaultProjectId();
+    const cloudFunctions = new CloudFunctions(google);
+
+    const responses = cloudFunctions.listFunctions(`projects/${project}/locations/-`);
+    for await (const response of responses) {
+        for (const func of response.functions) {
+            console.log(humanStringify(func, { maxDepth: 1 }));
+        }
     }
 }

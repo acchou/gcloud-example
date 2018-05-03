@@ -9,6 +9,7 @@ export async function initializeGoogleAPIs() {
     const project = await google.auth.getDefaultProjectId();
     google.options({ auth });
     console.log(`params: ${humanStringify(google._options.params)}`);
+    return google;
 }
 
 export function logFields<O, K extends keyof O>(obj: O, keys: K[]) {
