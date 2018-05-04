@@ -1,17 +1,19 @@
-import { google, GoogleApis } from "googleapis";
+import { GoogleApis } from "googleapis";
 import {
     logFields,
     googlePagedIterator,
-    googlePollOperation,
-    PollOptions
+    PollConfig,
+    unwrap,
+    poll,
+    PollOptions,
+    sleep,
+    initializeGoogleAPIs
 } from "./shared";
 import humanStringify from "human-stringify";
 
 import { Compute as GoogleCompute } from "googleapis/build/src/apis/compute/v1";
-
-export interface DeleteDiskOptions {
-    diskName: string;
-}
+import { Schema$Operation } from "googleapis/build/src/apis/compute/v1";
+import { AxiosPromise } from "axios";
 
 class Compute {
     project: string;
@@ -27,14 +29,20 @@ class Compute {
         });
     }
 
-    async zoneOperation(operation: string, options: PollOptions = {}) {
-        const result = await googlePollOperation(
-            () => this.gCompute.zoneOperations.get({ operation }),
-            options
-        );
+    async zoneOperation(operation: string | Schema$Operation, options: PollOptions = {}) {
+        operation = typeof operation === "string" ? operation : operation.name;
+
+        const result = await poll({
+            request: () => this.gCompute.zoneOperations.get({ operation }),
+            checkDone: result => result.data && result.data.status === "DONE",
+            describe: ({ data: { status, operationType } }) =>
+                `operationType: "${operationType}", status: "${status}"`,
+            verbose: true,
+            operation,
+            ...options
+        });
 
         if (!result) {
-            console.log(`Timeout waiting for operation "${operation}".`);
             return;
         }
         console.log(
@@ -46,8 +54,7 @@ class Compute {
     }
 
     async getDisk(disk: string) {
-        const response = await this.gCompute.disks.get({ disk });
-        return response.data;
+        return unwrap(this.gCompute.disks.get({ disk }));
     }
 
     async insertDisk(
@@ -55,27 +62,25 @@ class Compute {
         sizeGb: number,
         type: "pd-ssd" | "pd-standard" = "pd-ssd"
     ) {
-        const diskTypeResponse = await this.gCompute.diskTypes.get({ type });
+        const diskType = await unwrap(this.gCompute.diskTypes.get({ type }));
 
         const disk = {
             name,
             sizeGb,
-            type: diskTypeResponse.data.selfLink,
+            type: diskType.selfLink,
             sourceImage: "projects/debian-cloud/global/images/family/debian-8"
         };
 
-        const op = await this.gCompute.disks.insert({ resource: disk });
-        console.log(`disk insert status: ${op.statusText}`);
-        logFields(op.data, ["id", "endTime", "selfLink", "status", "warnings"]);
-
-        const operation = op.data.name;
-        return await this.zoneOperation(operation);
+        const operation = await unwrap(this.gCompute.disks.insert({ resource: disk }));
+        return this.zoneOperation(operation.name);
     }
 
     async insertInstance(name: string) {
-        const diskTypeResponse = await this.gCompute.diskTypes.get({
-            diskType: "pd-ssd"
-        });
+        const diskType = await unwrap(
+            this.gCompute.diskTypes.get({
+                diskType: "pd-ssd"
+            })
+        );
         const instance = {
             name,
             machineType: "zones/us-west1-a/machineTypes/g1-small",
@@ -85,7 +90,7 @@ class Compute {
                         sourceImage:
                             "projects/debian-cloud/global/images/family/debian-8",
                         diskSizeGb: 10,
-                        diskType: diskTypeResponse.data.selfLink
+                        diskType: diskType.selfLink
                     },
                     autoDelete: true,
                     boot: true
@@ -95,11 +100,13 @@ class Compute {
             networkInterfaces: [{ network: "global/networks/default" }]
         };
         console.log(`Inserting Instance: ${humanStringify(instance, { maxDepth: 4 })}`);
-        const result = await this.gCompute.instances.insert({
-            resource: instance
-        });
+        const operation = await unwrap(
+            this.gCompute.instances.insert({
+                resource: instance
+            })
+        );
 
-        await this.zoneOperation(result.data.name);
+        await this.zoneOperation(operation);
     }
 
     async *listInstances() {
@@ -109,14 +116,20 @@ class Compute {
     }
 
     async stopInstance(instance: string) {
-        const result = await this.gCompute.instances.delete({ instance });
-        await this.zoneOperation(result.data.name, { initialDelay: 20 * 1000 });
+        function delay(retries: number) {
+            if (retries === 0) {
+                return sleep(20 * 1000);
+            }
+            return sleep(5 * 1000);
+        }
+        const operation = await unwrap(this.gCompute.instances.delete({ instance }));
+        await this.zoneOperation(operation, { delay });
     }
 
     async deleteDisk(diskName: string) {
-        const op = await this.gCompute.disks.delete({ disk: diskName });
-        console.log(`disk delete status: ${op.data.status}`);
-        await this.zoneOperation(op.data.name);
+        const operation = await unwrap(this.gCompute.disks.delete({ disk: diskName }));
+        console.log(`disk delete status: ${operation.status}`);
+        await this.zoneOperation(operation);
     }
 
     async *listDisks() {
@@ -126,6 +139,7 @@ class Compute {
 
 export async function main() {
     try {
+        const google = await initializeGoogleAPIs();
         const zone = "us-west1-a";
         const project = await google.auth.getDefaultProjectId();
 

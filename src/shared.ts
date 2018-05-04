@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import humanStringify from "human-stringify";
+import { AxiosPromise, AxiosResponse } from "axios";
 
 export async function initializeGoogleAPIs() {
     const auth = await google.auth.getClient({
@@ -8,7 +9,6 @@ export async function initializeGoogleAPIs() {
 
     const project = await google.auth.getDefaultProjectId();
     google.options({ auth });
-    console.log(`params: ${humanStringify(google._options.params)}`);
     return google;
 }
 
@@ -21,37 +21,58 @@ export function logFields<O, K extends keyof O>(obj: O, keys: K[]) {
 }
 
 export function sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
 export interface PollOptions {
-    initialDelay?: number;
     maxRetries?: number;
-    retryDelayMs?: number;
+    verbose?: boolean;
+    operation?: string;
+    delay?: (retries: number) => Promise<void>;
 }
 
-export async function poll<T>(
-    request: () => Promise<T>,
-    checkDone: (result: T) => boolean,
-    beforeSleep?: (last: T) => void,
-    {
-        initialDelay = 5 * 1000,
-        maxRetries = 10,
-        retryDelayMs = 5 * 1000
-    }: PollOptions = {}
-) {
+export interface PollConfig<T> extends PollOptions {
+    request: () => Promise<T>;
+    checkDone: (result: T) => boolean;
+    describe?: (result: T) => string;
+}
+
+export async function defaultPollDelay(_retries: number) {
+    return sleep(5 * 1000);
+}
+
+export function defaultDescribe<T>(result: T) {
+    return humanStringify(result, { maxDepth: 1 });
+}
+
+export async function poll<T>({
+    request,
+    checkDone,
+    describe = defaultDescribe,
+    delay = defaultPollDelay,
+    maxRetries = 10,
+    verbose = false,
+    operation = ""
+}: PollConfig<T>): Promise<T | undefined> {
     let retries = 0;
-    await sleep(initialDelay);
+    await delay(retries);
     while (true) {
+        verbose && console.log(`Polling "${operation}"`);
         const result = await request();
+        verbose &&
+            describe &&
+            console.log(`Polling "${operation}" response: ${describe(result)}`);
         if (checkDone(result)) {
+            verbose && console.log(`Polling "${operation}" complete.`);
             return result;
         }
         if (retries++ >= maxRetries) {
+            verbose &&
+                console.log(`Polling "${operation}" timed out after ${retries} attempts`);
             return;
         }
-        beforeSleep && beforeSleep(result);
-        await sleep(retryDelayMs);
+        verbose && console.log(`Polling "${operation}" not complete, retrying...`);
+        await delay(retries);
     }
 }
 
@@ -59,43 +80,8 @@ interface HasNextPageToken {
     nextPageToken: string;
 }
 
-interface HasStatus {
-    status: string;
-}
-
-interface HasOperationType {
-    operationType: string;
-}
-
-type Operation = HasStatus & HasOperationType;
-
-interface HasData<T> {
-    data: T;
-}
-
-export function googlePollOperation<T extends HasData<Operation>>(
-    request: () => Promise<T>,
-    options: PollOptions = {}
-) {
-    let retries = 0;
-    return poll(
-        request,
-        result => result.data && result.data.status === "DONE",
-        result => {
-            retries++;
-            if (!result.data) {
-                console.log(`No data in response, retrying...`);
-                return;
-            }
-            const { status, operationType } = result.data;
-            console.log(`Operation "${operationType}" status: ${status}, retrying...`);
-        },
-        options
-    );
-}
-
 export async function* googlePagedIterator<T extends HasNextPageToken>(
-    request: (token: string | undefined) => Promise<HasData<T>>
+    request: (token: string | undefined) => AxiosPromise<T>
 ): AsyncIterableIterator<T> {
     let pageToken: string | undefined;
     do {
@@ -103,4 +89,9 @@ export async function* googlePagedIterator<T extends HasNextPageToken>(
         pageToken = result.data.nextPageToken;
         yield result.data;
     } while (pageToken);
+}
+
+export async function unwrap<T>(promise: AxiosPromise<T>) {
+    let result = await promise;
+    return result.data;
 }
