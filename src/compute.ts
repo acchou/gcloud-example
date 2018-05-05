@@ -29,7 +29,7 @@ class Compute {
         });
     }
 
-    async zoneOperation(operation: string | Schema$Operation, options: PollOptions = {}) {
+    async waitFor(operation: string | Schema$Operation, options: PollOptions = {}) {
         operation = typeof operation === "string" ? operation : operation.name;
 
         const result = await poll({
@@ -72,7 +72,7 @@ class Compute {
         };
 
         const operation = await unwrap(this.gCompute.disks.insert({ resource: disk }));
-        return this.zoneOperation(operation.name);
+        return this.waitFor(operation.name);
     }
 
     async insertInstance(name: string) {
@@ -106,7 +106,7 @@ class Compute {
             })
         );
 
-        await this.zoneOperation(operation);
+        await this.waitFor(operation);
     }
 
     async *listInstances() {
@@ -123,13 +123,13 @@ class Compute {
             return sleep(5 * 1000);
         }
         const operation = await unwrap(this.gCompute.instances.delete({ instance }));
-        await this.zoneOperation(operation, { delay });
+        await this.waitFor(operation, { delay });
     }
 
     async deleteDisk(diskName: string) {
         const operation = await unwrap(this.gCompute.disks.delete({ disk: diskName }));
         console.log(`disk delete status: ${operation.status}`);
-        await this.zoneOperation(operation);
+        await this.waitFor(operation);
     }
 
     async *listDisks() {
