@@ -52,7 +52,7 @@ class CloudFunctions {
         );
     }
 
-    callFunction(name: string, data: string) {
+    callFunction(name: string, data?: string) {
         return unwrap(
             this.gCloudFunctions.projects.locations.functions.call({
                 name,
@@ -128,28 +128,59 @@ class CloudFunctions {
         });
         return this.waitFor(response.data);
     }
+
+    async createFunctionWithZipFile(
+        locationName: string,
+        funcName: string,
+        zipFile: string,
+        description: string,
+        entryPoint: string,
+        timeout?: number,
+        availableMemoryMb?: number
+    ) {
+        const funcPath = this.functionPath(locationName, funcName);
+        const locationPath = this.locationPath(locationName);
+        const uploadUrlResponse = await this.generateUploaddUrl(locationPath);
+        // upload ZIP file to uploadUrlResponse.uploadUrl
+        await Axios.put(uploadUrlResponse.uploadUrl, fs.createReadStream(zipFile), {
+            headers: {
+                "content-type": "application/zip",
+                "x-goog-content-length-range": "0,104857600"
+            }
+        });
+        await this.createFunction(locationPath, {
+            name: funcPath,
+            description,
+            entryPoint,
+            timeout: `${timeout}s`,
+            availableMemoryMb,
+            sourceUploadUrl: uploadUrlResponse.uploadUrl
+        });
+    }
 }
 
-async function main() {
+export async function main() {
     const google = await initializeGoogleAPIs();
     const project = await google.auth.getDefaultProjectId();
     const cloudFunctions = new CloudFunctions(google, project);
 
     const locationName = "default";
-    const locationPath = cloudFunctions.locationPath(locationName);
     const funcName = "foo";
-    const zipFile = "foo.zip";
+    const zipFile = "dist.zip";
+    const description = `Example cloud function "foo"`;
+    const entryPoint = "entry";
+    const timeout = 60;
+    const availableMemoryMb = 512;
 
-    const cloudFunc = await createCloudFunction(
-        cloudFunctions,
+    await cloudFunctions.createFunctionWithZipFile(
         locationName,
         funcName,
-        locationPath,
-        zipFile
+        zipFile,
+        description,
+        entryPoint,
+        timeout,
+        availableMemoryMb
     );
-
-    if (cloudFunc) {
-    }
 
     const responses = cloudFunctions.listFunctions(cloudFunctions.locationPath("-"));
     for await (const response of responses) {
@@ -157,30 +188,10 @@ async function main() {
             console.log(humanStringify(func, { maxDepth: 1 }));
         }
     }
+
+    cloudFunctions.callFunction(cloudFunctions.functionPath(locationName, funcName));
 }
-async function createCloudFunction(
-    cloudFunctions: CloudFunctions,
-    locationName: string,
-    funcName: string,
-    locationPath: string,
-    zipFile: string
-) {
-    const funcPath = cloudFunctions.functionPath(locationName, funcName);
-    const uploadUrlResponse = await cloudFunctions.generateUploaddUrl(locationPath);
-    // upload ZIP file to uploadUrlResponse.uploadUrl
-    Axios.put(uploadUrlResponse.uploadUrl, fs.createReadStream(zipFile), {
-        headers: {
-            "content-type": "application/zip",
-            "x-goog-content-length-range": "0,104857600"
-        }
-    });
-    let func: Partial<Schema$CloudFunction> = {
-        name: funcPath,
-        description: `Example cloud function "foo"`,
-        entryPoint: "foo",
-        timeout: "60s",
-        availableMemoryMb: 512,
-        sourceUploadUrl: uploadUrlResponse.uploadUrl
-    };
-    return cloudFunctions.createFunction(locationPath, func);
+
+export function entry() {
+    console.log(`Called cloud function`);
 }
