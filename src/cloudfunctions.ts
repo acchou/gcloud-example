@@ -192,16 +192,20 @@ export async function main() {
     const timeout = 60;
     const availableMemoryMb = 512;
 
-    await cloudFunctions.createFunctionWithZipFile(
-        locationName,
-        funcName,
-        zipFile,
-        description,
-        entryPoint,
-        timeout,
-        availableMemoryMb
-    );
+    console.log(`Creating cloud function ${funcName}`);
+    await cloudFunctions
+        .createFunctionWithZipFile(
+            locationName,
+            funcName,
+            zipFile,
+            description,
+            entryPoint,
+            timeout,
+            availableMemoryMb
+        )
+        .catch(err => console.error(err));
 
+    console.log(`Listing cloud functions:`);
     const responses = cloudFunctions.listFunctions(cloudFunctions.locationPath("-"));
     for await (const response of responses) {
         for (const func of response.functions) {
@@ -209,10 +213,18 @@ export async function main() {
         }
     }
 
-    cloudFunctions.callFunction(cloudFunctions.functionPath(locationName, funcName));
+    console.log(`Calling cloud function ${funcName}`);
+    const callResponse = await cloudFunctions.callFunction(
+        cloudFunctions.functionPath(locationName, funcName)
+    );
+
+    console.log(`Response: ${callResponse.result}`);
+
+    console.log(`Done.`);
 }
 
 export function entry(request: Request, response: Response) {
     console.log(`Called cloud function ${request.originalUrl}`);
+    response.send("Hello!");
     response.end();
 }
