@@ -2,11 +2,11 @@
     "name": "gcloud-example",
     "version": "1.0.0",
     "description": "google cloud api usage example",
-    "main": "build/cloudfunctions.js",
+    "main": "generated/cloudfunctions.js",
     "scripts": {
         "build": "tsc",
         "watch": "tsc --watch",
-        "dist": "zip -r dist.zip build src types package.json tsconfig.json",
+        "dist": "zip -r dist.zip generated package.json",
         "test": "jest"
     },
     "author": "",
@@ -16,12 +16,14 @@
     },
     "dependencies": {
         "commander": "^2.12.2",
+        "express": "^4.16.3",
         "googleapis": "^29.0.0",
         "human-stringify": "^0.2.0",
         "ix": "^2.3.5",
         "tslib": "^1.9.0"
     },
     "devDependencies": {
+        "@types/express": "^4.11.1",
         "@types/jest": "^22.0.0",
         "@types/node": "^8.5.1",
         "jest": "^22.0.4",
@@ -33,7 +35,16 @@
             "^.+\\.tsx?$": "ts-jest"
         },
         "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
-        "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"],
-        "roots": ["test"]
+        "moduleFileExtensions": [
+            "ts",
+            "tsx",
+            "js",
+            "jsx",
+            "json",
+            "node"
+        ],
+        "roots": [
+            "test"
+        ]
     }
 }

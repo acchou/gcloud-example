@@ -1,19 +1,14 @@
-import {
-    logFields,
-    initializeGoogleAPIs,
-    googlePagedIterator,
-    unwrap,
-    poll
-} from "./shared";
-import humanStringify from "human-stringify";
-import { GoogleApis, google } from "googleapis";
+import Axios from "axios";
+import { Request, Response } from "express";
+import * as fs from "fs";
+import { GoogleApis } from "googleapis";
 import {
     Cloudfunctions as GoogleCloudFunctions,
-    Schema$Operation,
-    Schema$CloudFunction
+    Schema$CloudFunction,
+    Schema$Operation
 } from "googleapis/build/src/apis/cloudfunctions/v1";
-import * as fs from "fs";
-import Axios from "axios";
+import humanStringify from "human-stringify";
+import { googlePagedIterator, initializeGoogleAPIs, poll, unwrap } from "./shared";
 
 const zone = "us-west1-a";
 
@@ -62,10 +57,13 @@ class CloudFunctions {
     }
 
     async createFunction(location: string, func: Partial<Schema$CloudFunction>) {
-        const operation = await this.gCloudFunctions.projects.locations.functions.create({
-            location,
-            resource: func
-        });
+        const operation = await this.gCloudFunctions.projects.locations.functions.create(
+            {
+                location,
+                resource: func
+            },
+            {}
+        );
 
         return this.waitFor(operation.data);
     }
@@ -87,7 +85,14 @@ class CloudFunctions {
         );
     }
 
-    generateUploaddUrl(parent: string) {
+    async generateUploaddUrl(parent: string) {
+        // const response = await this.gCloudFunctions.projects.locations.functions.generateUploadUrl(
+        //     {
+        //         parent
+        //     }
+        // );
+        // console.log(humanStringify(response, { maxDepth: 4 }));
+        // return response.data;
         return unwrap(
             this.gCloudFunctions.projects.locations.functions.generateUploadUrl({
                 parent
@@ -138,24 +143,43 @@ class CloudFunctions {
         timeout?: number,
         availableMemoryMb?: number
     ) {
+        console.log(`Create cloud function`);
         const funcPath = this.functionPath(locationName, funcName);
         const locationPath = this.locationPath(locationName);
+        console.log(`  funcPath: ${funcPath}`);
+        console.log(`  locationPath: ${locationPath}`);
         const uploadUrlResponse = await this.generateUploaddUrl(locationPath);
+        console.log(`upload URL: ${uploadUrlResponse.uploadUrl}, zipFile: ${zipFile}`);
         // upload ZIP file to uploadUrlResponse.uploadUrl
-        await Axios.put(uploadUrlResponse.uploadUrl, fs.createReadStream(zipFile), {
-            headers: {
-                "content-type": "application/zip",
-                "x-goog-content-length-range": "0,104857600"
+        const putResult = await Axios.put(
+            uploadUrlResponse.uploadUrl,
+            fs.createReadStream(zipFile),
+            {
+                headers: {
+                    "content-type": "application/zip",
+                    "x-goog-content-length-range": "0,104857600"
+                }
             }
-        });
-        await this.createFunction(locationPath, {
+        );
+
+        console.log(`Put response: ${putResult.statusText}`);
+
+        console.log(`creating function`);
+
+        const functionRequest: Partial<Schema$CloudFunction> = {
             name: funcPath,
             description,
             entryPoint,
             timeout: `${timeout}s`,
             availableMemoryMb,
             sourceUploadUrl: uploadUrlResponse.uploadUrl
-        });
+        };
+        console.log(
+            `Create function: locationPath: ${locationPath}, ${humanStringify(
+                functionRequest
+            )}`
+        );
+        await this.createFunction(locationPath, functionRequest);
     }
 }
 
@@ -164,10 +188,11 @@ export async function main() {
     const project = await google.auth.getDefaultProjectId();
     const cloudFunctions = new CloudFunctions(google, project);
 
-    const locationName = "default";
+    //const locationName = "us-central1";
+    const locationName = "us-west1";
     const funcName = "foo";
     const zipFile = "dist.zip";
-    const description = `Example cloud function "foo"`;
+    const description = `Example cloud function`;
     const entryPoint = "entry";
     const timeout = 60;
     const availableMemoryMb = 512;
@@ -192,6 +217,7 @@ export async function main() {
     cloudFunctions.callFunction(cloudFunctions.functionPath(locationName, funcName));
 }
 
-export function entry() {
-    console.log(`Called cloud function`);
+export function entry(request: Request, response: Response) {
+    console.log(`Called cloud function ${request.originalUrl}`);
+    response.end();
 }
