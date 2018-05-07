@@ -62,4 +62,4 @@ build/
 
 out
 out.*
-swagger
+dist.zip

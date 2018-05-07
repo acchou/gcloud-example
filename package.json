@@ -2,11 +2,11 @@
     "name": "gcloud-example",
     "version": "1.0.0",
     "description": "google cloud api usage example",
-    "main": "generated/cloudfunctions.js",
+    "main": "build/cloudfunctions.js",
     "scripts": {
         "build": "tsc",
         "watch": "tsc --watch",
-        "dist": "zip -r dist.zip generated package.json",
+        "dist": "zip -r dist.zip build package.json",
         "test": "jest"
     },
     "author": "",
@@ -15,6 +15,7 @@
         "node": ">=8.0.0"
     },
     "dependencies": {
+        "axios": "^0.18.0",
         "commander": "^2.12.2",
         "express": "^4.16.3",
         "googleapis": "^29.0.0",

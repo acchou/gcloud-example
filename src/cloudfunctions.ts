@@ -1,11 +1,12 @@
-import Axios from "axios";
+import Axios, { AxiosResponse } from "axios";
 import { Request, Response } from "express";
 import * as fs from "fs";
 import { GoogleApis } from "googleapis";
 import {
     Cloudfunctions as GoogleCloudFunctions,
     Schema$CloudFunction,
-    Schema$Operation
+    Schema$Operation,
+    Schema$GenerateUploadUrlResponse
 } from "googleapis/build/src/apis/cloudfunctions/v1";
 import humanStringify from "human-stringify";
 import { googlePagedIterator, initializeGoogleAPIs, poll, unwrap } from "./shared";
@@ -86,13 +87,6 @@ class CloudFunctions {
     }
 
     async generateUploaddUrl(parent: string) {
-        // const response = await this.gCloudFunctions.projects.locations.functions.generateUploadUrl(
-        //     {
-        //         parent
-        //     }
-        // );
-        // console.log(humanStringify(response, { maxDepth: 4 }));
-        // return response.data;
         return unwrap(
             this.gCloudFunctions.projects.locations.functions.generateUploadUrl({
                 parent
@@ -172,7 +166,8 @@ class CloudFunctions {
             entryPoint,
             timeout: `${timeout}s`,
             availableMemoryMb,
-            sourceUploadUrl: uploadUrlResponse.uploadUrl
+            sourceUploadUrl: uploadUrlResponse.uploadUrl,
+            httpsTrigger: { url: "" }
         };
         console.log(
             `Create function: locationPath: ${locationPath}, ${humanStringify(
@@ -188,8 +183,8 @@ export async function main() {
     const project = await google.auth.getDefaultProjectId();
     const cloudFunctions = new CloudFunctions(google, project);
 
-    //const locationName = "us-central1";
-    const locationName = "us-west1";
+    const locationName = "us-central1";
+    //const locationName = "us-west1";
     const funcName = "foo";
     const zipFile = "dist.zip";
     const description = `Example cloud function`;
