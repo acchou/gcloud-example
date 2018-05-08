@@ -18,8 +18,8 @@
         "axios": "^0.18.0",
         "commander": "^2.12.2",
         "express": "^4.16.3",
-        "googleapis": "^29.0.0",
-        "human-stringify": "^0.2.0",
+        "googleapis": "^30.0.0",
+        "human-stringify": "^0.2.2",
         "ix": "^2.3.5",
         "tslib": "^1.9.0"
     },
@@ -36,16 +36,7 @@
             "^.+\\.tsx?$": "ts-jest"
         },
         "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
-        "moduleFileExtensions": [
-            "ts",
-            "tsx",
-            "js",
-            "jsx",
-            "json",
-            "node"
-        ],
-        "roots": [
-            "test"
-        ]
+        "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"],
+        "roots": ["test"]
     }
 }

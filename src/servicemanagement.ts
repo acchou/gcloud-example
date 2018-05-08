@@ -1,8 +1,4 @@
-import { GoogleApis } from "googleapis";
-import {
-    Schema$Operation,
-    Servicemanagement as GoogleServiceManagement
-} from "googleapis/build/src/apis/servicemanagement/v1";
+import { GoogleApis, servicemanagement_v1 as gsm } from "googleapis";
 import humanStringify from "human-stringify";
 import {
     googlePagedIterator,
@@ -16,7 +12,7 @@ import { AxiosResponse } from "axios";
 const zone = "us-west1-a";
 
 class ServiceManagement {
-    gServiceManagement: GoogleServiceManagement;
+    gServiceManagement: gsm.Servicemanagement;
     project: string;
 
     constructor(google: GoogleApis, project: string) {
@@ -44,7 +40,7 @@ class ServiceManagement {
         const operation = await unwrap(
             this.gServiceManagement.services.enable({
                 serviceName,
-                resource: {
+                requestBody: {
                     consumerId: `project:${this.project}`
                 }
             })
@@ -57,7 +53,7 @@ class ServiceManagement {
         const operation = await unwrap(
             this.gServiceManagement.services.disable({
                 serviceName,
-                resource: {
+                requestBody: {
                     consumerId: `project:${this.project}`
                 }
             })
@@ -66,15 +62,15 @@ class ServiceManagement {
         await this.serviceOperation(operation);
     }
 
-    async serviceOperation(operation: string | Schema$Operation) {
+    async serviceOperation(operation: string | gsm.Schema$Operation) {
         const name = typeof operation === "string" ? operation : operation.name;
 
         let retries = 0;
 
         const result = await poll({
             request: () => this.gServiceManagement.operations.get({ name }),
-            checkDone: (result: AxiosResponse<Schema$Operation>) =>
-                result.data && result.data.done,
+            checkDone: (result: AxiosResponse<gsm.Schema$Operation>) =>
+                result.data && result.data.done!,
             describe: result => `${humanStringify(result.data)}`,
             operation: name,
             verbose: true
@@ -94,7 +90,7 @@ export async function main() {
     let i = 0;
     for await (const response of servicemanagement.listServices()) {
         console.log(`Service response: ${i++}`);
-        for (const service of response.services) {
+        for (const service of response.services || []) {
             console.log(`Service: ${service.serviceName}`);
         }
     }

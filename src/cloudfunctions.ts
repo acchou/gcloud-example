@@ -1,20 +1,14 @@
 import Axios from "axios";
 import { Request, Response } from "express";
 import * as fs from "fs";
-import { GoogleApis } from "googleapis";
-import {
-    Cloudfunctions as GoogleCloudFunctions,
-    Schema$CloudFunction,
-    Schema$Operation
-} from "googleapis/build/src/apis/cloudfunctions/v1";
+import { GoogleApis, cloudfunctions_v1 as gcf } from "googleapis";
 import humanStringify from "human-stringify";
 import { googlePagedIterator, initializeGoogleAPIs, poll, unwrap } from "./shared";
-import * as bodyParser from "body-parser";
 
 const zone = "us-west1-a";
 
 class CloudFunctions {
-    gCloudFunctions: GoogleCloudFunctions;
+    gCloudFunctions: gcf.Cloudfunctions;
     project: string;
 
     constructor(google: GoogleApis, project: string) {
@@ -22,11 +16,11 @@ class CloudFunctions {
         this.project = project;
     }
 
-    async waitFor(operation: string | Schema$Operation) {
-        const name = typeof operation === "string" ? operation : operation.name;
+    async waitFor(operation: string | gcf.Schema$Operation) {
+        const name = typeof operation === "string" ? operation : operation.name!;
         return poll({
             request: () => this.getOperation(name),
-            checkDone: result => result.done,
+            checkDone: result => result.done || true,
             operation: name,
             verbose: true
         });
@@ -52,16 +46,16 @@ class CloudFunctions {
         return unwrap(
             this.gCloudFunctions.projects.locations.functions.call({
                 name: path,
-                resource: { data }
+                requestBody: { data }
             })
         );
     }
 
-    async createFunction(location: string, func: Partial<Schema$CloudFunction>) {
+    async createFunction(location: string, func: gcf.Schema$CloudFunction) {
         const operation = await this.gCloudFunctions.projects.locations.functions.create(
             {
                 location,
-                resource: func
+                requestBody: func
             },
             {}
         );
@@ -81,7 +75,7 @@ class CloudFunctions {
         return unwrap(
             this.gCloudFunctions.projects.locations.functions.generateDownloadUrl({
                 name,
-                resource: { versionId }
+                requestBody: { versionId }
             })
         );
     }
@@ -118,12 +112,12 @@ class CloudFunctions {
     async patchFunction(
         name: string,
         updateMask: string,
-        func: Partial<Schema$CloudFunction>
+        func: gcf.Schema$CloudFunction
     ) {
         const response = await this.gCloudFunctions.projects.locations.functions.patch({
             name,
             updateMask,
-            resource: func
+            requestBody: func
         });
         return this.waitFor(response.data);
     }
@@ -146,7 +140,7 @@ class CloudFunctions {
         console.log(`upload URL: ${uploadUrlResponse.uploadUrl}, zipFile: ${zipFile}`);
         // upload ZIP file to uploadUrlResponse.uploadUrl
         const putResult = await Axios.put(
-            uploadUrlResponse.uploadUrl,
+            uploadUrlResponse.uploadUrl!,
             fs.createReadStream(zipFile),
             {
                 headers: {
@@ -160,7 +154,7 @@ class CloudFunctions {
 
         console.log(`creating function`);
 
-        const functionRequest: Partial<Schema$CloudFunction> = {
+        const functionRequest: gcf.Schema$CloudFunction = {
             name: funcPath,
             description,
             entryPoint,
@@ -209,7 +203,8 @@ export async function main() {
     console.log(`Listing cloud functions:`);
     const responses = cloudFunctions.listFunctions(cloudFunctions.locationPath("-"));
     for await (const response of responses) {
-        for (const func of response.functions) {
+        const functions = response.functions || [];
+        for (const func of functions) {
             console.log(humanStringify(func, { maxDepth: 1 }));
         }
     }

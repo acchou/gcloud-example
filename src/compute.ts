@@ -1,4 +1,4 @@
-import { GoogleApis } from "googleapis";
+import { GoogleApis, compute_v1 as gcompute } from "googleapis";
 import {
     logFields,
     googlePagedIterator,
@@ -11,14 +11,14 @@ import {
 } from "./shared";
 import humanStringify from "human-stringify";
 
-import { Compute as GoogleCompute } from "googleapis/build/src/apis/compute/v1";
-import { Schema$Operation } from "googleapis/build/src/apis/compute/v1";
 import { AxiosPromise } from "axios";
+
+type Schema$Operation = gcompute.Schema$Operation;
 
 class Compute {
     project: string;
     zone: string;
-    gCompute: GoogleCompute;
+    gCompute: gcompute.Compute;
 
     constructor(google: GoogleApis, project: string, zone: string) {
         this.project = project;
@@ -29,8 +29,8 @@ class Compute {
         });
     }
 
-    async waitFor(operation: string | Schema$Operation, options: PollOptions = {}) {
-        operation = typeof operation === "string" ? operation : operation.name;
+    async waitFor(op: string | Schema$Operation, options: PollOptions = {}) {
+        const operation = typeof op === "string" ? op : op.name!;
 
         const result = await poll({
             request: () => this.gCompute.zoneOperations.get({ operation }),
@@ -60,19 +60,19 @@ class Compute {
     async insertDisk(
         name: string,
         sizeGb: number,
-        type: "pd-ssd" | "pd-standard" = "pd-ssd"
+        diskType: "pd-ssd" | "pd-standard" = "pd-ssd"
     ) {
-        const diskType = await unwrap(this.gCompute.diskTypes.get({ type }));
+        const type = await unwrap(this.gCompute.diskTypes.get({ diskType }));
 
         const disk = {
             name,
-            sizeGb,
-            type: diskType.selfLink,
+            sizeGb: `${sizeGb}`,
+            type: type.selfLink,
             sourceImage: "projects/debian-cloud/global/images/family/debian-8"
         };
 
-        const operation = await unwrap(this.gCompute.disks.insert({ resource: disk }));
-        return this.waitFor(operation.name);
+        const operation = await unwrap(this.gCompute.disks.insert({ requestBody: disk }));
+        return this.waitFor(operation.name!);
     }
 
     async insertInstance(name: string) {
@@ -89,7 +89,7 @@ class Compute {
                     initializeParams: {
                         sourceImage:
                             "projects/debian-cloud/global/images/family/debian-8",
-                        diskSizeGb: 10,
+                        diskSizeGb: "10",
                         diskType: diskType.selfLink
                     },
                     autoDelete: true,
@@ -98,11 +98,11 @@ class Compute {
             ],
             scheduling: { preemptible: false },
             networkInterfaces: [{ network: "global/networks/default" }]
-        };
+        } as gcompute.Schema$Instance;
         console.log(`Inserting Instance: ${humanStringify(instance, { maxDepth: 4 })}`);
         const operation = await unwrap(
             this.gCompute.instances.insert({
-                resource: instance
+                requestBody: instance
             })
         );
 
@@ -151,7 +151,7 @@ export async function main() {
         console.log(`Running instances:`);
         for await (let instances of compute.listInstances()) {
             instances = instances || [];
-            for (const instance of instances.items) {
+            for (const instance of instances.items || []) {
                 console.log(humanStringify(instance, { maxDepth: 1 }));
             }
         }
@@ -159,7 +159,7 @@ export async function main() {
         console.log(`Disks:`);
         for await (let disks of compute.listDisks()) {
             disks = disks || [];
-            for (const disk of disks.items) {
+            for (const disk of disks.items || []) {
                 console.log(humanStringify(disk, { maxDepth: 1 }));
             }
         }

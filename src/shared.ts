@@ -77,7 +77,7 @@ export async function poll<T>({
 }
 
 interface HasNextPageToken {
-    nextPageToken: string;
+    nextPageToken?: string;
 }
 
 export async function* googlePagedIterator<T extends HasNextPageToken>(

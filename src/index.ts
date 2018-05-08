@@ -7,18 +7,18 @@ import { initializeGoogleAPIs } from "./shared";
 import Axios, { AxiosResponse, AxiosPromise } from "axios";
 
 async function main() {
-    // await computeMain();
+    await computeMain();
     // await sourceRepoMain();
     // await serviceManagementMain();
-    await cloudFunctionsMain().catch(err => {
-        if (err.response && err.response.data) {
-            console.error(humanStringify(err.response.data, { maxDepth: 5 }));
-            const response = err as AxiosResponse;
-            console.error(humanStringify(response.statusText, { maxDepth: 5 }));
-        } else {
-            console.error(err.stack);
-        }
-    });
+    // await cloudFunctionsMain().catch(err => {
+    //     if (err.response && err.response.data) {
+    //         console.error(humanStringify(err.response.data, { maxDepth: 5 }));
+    //         const response = err as AxiosResponse;
+    //         console.error(humanStringify(response.statusText, { maxDepth: 5 }));
+    //     } else {
+    //         console.error(err.stack);
+    //     }
+    // });
 }
 
 main();
