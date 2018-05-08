@@ -1,15 +1,15 @@
-import Axios, { AxiosResponse } from "axios";
+import Axios from "axios";
 import { Request, Response } from "express";
 import * as fs from "fs";
 import { GoogleApis } from "googleapis";
 import {
     Cloudfunctions as GoogleCloudFunctions,
     Schema$CloudFunction,
-    Schema$Operation,
-    Schema$GenerateUploadUrlResponse
+    Schema$Operation
 } from "googleapis/build/src/apis/cloudfunctions/v1";
 import humanStringify from "human-stringify";
 import { googlePagedIterator, initializeGoogleAPIs, poll, unwrap } from "./shared";
+import * as bodyParser from "body-parser";
 
 const zone = "us-west1-a";
 
@@ -48,10 +48,10 @@ class CloudFunctions {
         );
     }
 
-    callFunction(name: string, data?: string) {
+    callFunction(path: string, data?: string) {
         return unwrap(
             this.gCloudFunctions.projects.locations.functions.call({
-                name,
+                name: path,
                 resource: { data }
             })
         );
@@ -69,9 +69,9 @@ class CloudFunctions {
         return this.waitFor(operation.data);
     }
 
-    async deleteFunction(name: string) {
+    async deleteFunction(path: string) {
         const response = await this.gCloudFunctions.projects.locations.functions.delete({
-            name
+            name: path
         });
 
         return this.waitFor(response.data);
@@ -191,6 +191,7 @@ export async function main() {
     const entryPoint = "entry";
     const timeout = 60;
     const availableMemoryMb = 512;
+    const funcPath = cloudFunctions.functionPath(locationName, funcName);
 
     console.log(`Creating cloud function ${funcName}`);
     await cloudFunctions
@@ -203,7 +204,7 @@ export async function main() {
             timeout,
             availableMemoryMb
         )
-        .catch(err => console.error(err));
+        .catch(err => console.error(err.message));
 
     console.log(`Listing cloud functions:`);
     const responses = cloudFunctions.listFunctions(cloudFunctions.locationPath("-"));
@@ -214,17 +215,18 @@ export async function main() {
     }
 
     console.log(`Calling cloud function ${funcName}`);
-    const callResponse = await cloudFunctions.callFunction(
-        cloudFunctions.functionPath(locationName, funcName)
-    );
+    const callResponse = await cloudFunctions.callFunction(funcPath, "Andy");
 
     console.log(`Response: ${callResponse.result}`);
+
+    console.log(`Deleting cloud function ${funcName}`);
+    await cloudFunctions.deleteFunction(funcPath);
 
     console.log(`Done.`);
 }
 
 export function entry(request: Request, response: Response) {
     console.log(`Called cloud function ${request.originalUrl}`);
-    response.send("Hello!");
+    response.send(`Hello ${request.body}!`);
     response.end();
 }
