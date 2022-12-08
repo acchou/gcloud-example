@@ -17,7 +17,7 @@
     "dependencies": {
         "axios": "^0.18.0",
         "commander": "^2.12.2",
-        "express": "^4.16.3",
+        "express": "^4.17.3",
         "googleapis": "^30.0.0",
         "human-stringify": "^0.2.2",
         "ix": "^2.3.5",
